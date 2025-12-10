@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CanSat Mission Control</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+    <script src="https://cdn.rawgit.com/Mikhus/canvas-gauges/gh-pages/download/2.1.7/all/gauge.min.js"></script>
+
+    <style>
+        body { background-color: #1a1a1a; color: white; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
+        h1 { text-align: center; color: #00ffcc; text-transform: uppercase; letter-spacing: 5px; border-bottom: 2px solid #00ffcc; padding-bottom: 10px; }
+        
+        /* Grid Layout */
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 20px; }
+        .card { background: #2d2d2d; padding: 20px; border-radius: 10px; border: 1px solid #444; text-align: center; }
+        .card h3 { color: #aaa; margin-top: 0; }
+        .big-text { font-size: 24px; font-weight: bold; color: #fff; }
+        
+        /* Map Styling */
+        #map { height: 400px; width: 100%; border-radius: 10px; border: 2px solid #00ffcc; }
+        .map-container { grid-column: span 2; } /* Map takes up 2 columns */
+
+        /* Status Blinker */
+        .live-indicator { height: 10px; width: 10px; background-color: red; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .blink { animation: blinker 1s linear infinite; background-color: #00ff00; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <h1><span id="status" class="live-indicator"></span> CANSAT LIVE TELEMETRY</h1>
+
+    <div class="dashboard">
+        <div class="card">
+            <h3>TEMPERATURE</h3>
+            <canvas id="tempGauge"></canvas>
+            <div id="tempVal" class="big-text">-- °C</div>
+        </div>
+
+        <div class="card">
+            <h3>HUMIDITY</h3>
+            <canvas id="humGauge"></canvas>
+            <div id="humVal" class="big-text">-- %</div>
+        </div>
+
+        <div class="card">
+            <h3>PRESSURE</h3>
+            <div id="pressVal" class="big-text" style="font-size: 30px; margin-top: 40px;">--</div>
+            <p>Pascals</p>
+        </div>
+
+        <div class="card map-container">
+            <h3>LIVE GPS TRACKING</h3>
+            <div id="map"></div>
+        </div>
+
+        <div class="card">
+            <h3>ALTITUDE</h3>
+            <canvas id="altGauge"></canvas>
+            <div id="altVal" class="big-text">-- m</div>
+            <hr>
+            <h3>TILT</h3>
+            <p>Pitch: <span id="pitchVal">0</span>°</p>
+            <p>Roll: <span id="rollVal">0</span>°</p>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. FIREBASE CONFIGURATION (PASTE YOUR KEYS HERE) ---
+        const firebaseConfig = {
+    apiKey: "AIzaSyAordYMujzXhpe3zXeYEb2qy7vLPilWzuo",
+    authDomain: "cansat-173ae.firebaseapp.com",
+    databaseURL: "https://cansat-173ae-default-rtdb.firebaseio.com",
+    projectId: "cansat-173ae",
+    storageBucket: "cansat-173ae.firebasestorage.app",
+    messagingSenderId: "709077378812",
+    appId: "1:709077378812:web:21fe03f244a04c00dfd979" };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        // --- 2. SETUP MAP (Leaflet) ---
+        // Default View (0,0) until data comes in
+        const map = L.map('map').setView([0, 0], 2); 
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        const marker = L.marker([0, 0]).addTo(map);
+        const flightPath = L.polyline([], {color: 'red'}).addTo(map);
+
+        // --- 3. SETUP GAUGES ---
+        // Temperature Gauge
+        var tempGauge = new RadialGauge({
+            renderTo: 'tempGauge', width: 200, height: 200, units: "°C",
+            minValue: 0, maxValue: 50,
+            majorTicks: ["0","10","20","30","40","50"],
+            minorTicks: 2, strokeTicks: true,
+            colorPlate: "#222", colorMajorTicks: "#f5f5f5", colorMinorTicks: "#ddd",
+            colorNumbers: "#ccc", colorNeedle: "rgba(240, 128, 128, 1)", colorNeedleEnd: "rgba(255, 160, 122, .9)",
+            valueBox: false,
+            highlights: [ { from: 35, to: 50, color: "rgba(200, 50, 50, .75)" } ]
+        }).draw();
+
+        // Humidity Gauge
+        var humGauge = new RadialGauge({
+            renderTo: 'humGauge', width: 200, height: 200, units: "%",
+            minValue: 0, maxValue: 100,
+            colorPlate: "#222", colorNumbers: "#ccc",
+            highlights: [ { from: 0, to: 100, color: "rgba(0, 200, 255, .3)" } ]
+        }).draw();
+
+        // Altitude Gauge (Linear)
+        var altGauge = new LinearGauge({
+            renderTo: 'altGauge', width: 120, height: 300, units: "m",
+            minValue: 0, maxValue: 300,
+            colorPlate: "#222", colorBarProgress: "#00ffcc",
+        }).draw();
+
+        // --- 4. LISTEN FOR DATA ---
+        console.log("Listening for Firebase data...");
+        
+        // Listen to the 'Live' node for real-time updates
+        db.ref('/CanSat/Live').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if(!data) return;
+
+            // Update Status Light
+            document.getElementById('status').classList.add('blink');
+
+            // 1. Update Text Values
+            document.getElementById('tempVal').innerText = data.Temperature + " °C";
+            document.getElementById('humVal').innerText = data.Humidity + " %";
+            document.getElementById('pressVal').innerText = data.Pressure;
+            document.getElementById('altVal').innerText = data.Altitude + " m";
+            
+            // Check if Motion data exists (Pitch/Roll)
+            if(data.Motion) {
+                // Calculate Pitch/Roll here if your Python script sends Raw X/Y/Z
+                // Or display directly if Python sends degrees.
+                // Assuming Python sends Raw:
+                let acX = data.Motion.X; let acY = data.Motion.Y; let acZ = data.Motion.Z;
+                let pitch = Math.atan2(-acX, Math.sqrt(acY*acY + acZ*acZ)) * 57.29;
+                let roll = Math.atan2(acY, acZ) * 57.29;
+                
+                document.getElementById('pitchVal').innerText = pitch.toFixed(1);
+                document.getElementById('rollVal').innerText = roll.toFixed(1);
+            }
+
+            // 2. Update Gauges
+            tempGauge.value = data.Temperature;
+            humGauge.value = data.Humidity;
+            altGauge.value = data.Altitude;
+
+            // 3. Update Map
+            let lat = parseFloat(data.Location.Lat);
+            let lng = parseFloat(data.Location.Lng);
+
+            // Only update map if GPS has a fix (not 0.0)
+            if (lat !== 0 && lng !== 0) {
+                let newPos = [lat, lng];
+                marker.setLatLng(newPos);
+                map.setView(newPos, 18); // Zoom level 18 (Street level)
+                flightPath.addLatLng(newPos); // Draw tail
+            }
+            
+            // Turn off blink after 500ms (so it blinks on next update)
+            setTimeout(() => {
+                document.getElementById('status').classList.remove('blink');
+            }, 500);
+        });
+
+    </script>
+</body>
+</html>
