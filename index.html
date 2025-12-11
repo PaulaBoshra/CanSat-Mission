@@ -120,6 +120,9 @@
             colorPlate: "#222", colorBarProgress: "#00ffcc",
         }).draw();
 
+        // Pressure Gauge
+        var pressGauge = new RadialGauge({ renderTo: 'pressGauge', width: 200, height: 200, units: "hPa", minValue: 900, maxValue: 1100, majorTicks: ["900","950","1000","1050","1100"], minorTicks: 5, strokeTicks: true, colorPlate: "#222", colorMajorTicks: "#f5f5f5", colorMinorTicks: "#ddd", colorNumbers: "#ccc", colorNeedle: "cyan", valueBox: false, borderShadowWidth: 0, borders: true, highlights: [ { from: 1000, to: 1020, color: "rgba(0, 255, 0, .2)" } ] }).draw();
+
         // --- 4. LISTEN FOR DATA ---
         console.log("Listening for Firebase data...");
         
@@ -175,4 +178,5 @@
 
     </script>
 </body>
+
 </html>
