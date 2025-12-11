@@ -47,8 +47,10 @@
 
         <div class="card">
             <h3>PRESSURE</h3>
-            <div id="pressVal" class="big-text" style="font-size: 30px; margin-top: 40px;">--</div>
-            <p>Pascals</p>
+            <!-- Canvas for the pressure gauge -->
+            <canvas id="pressGauge"></canvas>
+            <div id="pressVal" class="big-text" style="font-size: 30px; margin-top: 10px;">-- hPa</div>
+            <p>hPa (hectopascals)</p>
         </div>
 
         <div class="card map-container">
@@ -70,13 +72,14 @@
     <script>
         // --- 1. FIREBASE CONFIGURATION (PASTE YOUR KEYS HERE) ---
         const firebaseConfig = {
-    apiKey: "AIzaSyAordYMujzXhpe3zXeYEb2qy7vLPilWzuo",
-    authDomain: "cansat-173ae.firebaseapp.com",
-    databaseURL: "https://cansat-173ae-default-rtdb.firebaseio.com",
-    projectId: "cansat-173ae",
-    storageBucket: "cansat-173ae.firebasestorage.app",
-    messagingSenderId: "709077378812",
-    appId: "1:709077378812:web:21fe03f244a04c00dfd979" };
+            apiKey: "AIzaSyAordYMujzXhpe3zXeYEb2qy7vLPilWzuo",
+            authDomain: "cansat-173ae.firebaseapp.com",
+            databaseURL: "https://cansat-173ae-default-rtdb.firebaseio.com",
+            projectId: "cansat-173ae",
+            storageBucket: "cansat-173ae.firebasestorage.app",
+            messagingSenderId: "709077378812",
+            appId: "1:709077378812:web:21fe03f244a04c00dfd979"
+        };
 
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
@@ -120,8 +123,21 @@
             colorPlate: "#222", colorBarProgress: "#00ffcc",
         }).draw();
 
-        // Pressure Gauge
-        var pressGauge = new RadialGauge({ renderTo: 'pressGauge', width: 200, height: 200, units: "hPa", minValue: 900, maxValue: 1100, majorTicks: ["900","950","1000","1050","1100"], minorTicks: 5, strokeTicks: true, colorPlate: "#222", colorMajorTicks: "#f5f5f5", colorMinorTicks: "#ddd", colorNumbers: "#ccc", colorNeedle: "cyan", valueBox: false, borderShadowWidth: 0, borders: true, highlights: [ { from: 1000, to: 1020, color: "rgba(0, 255, 0, .2)" } ] }).draw();
+        // Pressure Gauge (complete implementation)
+        var pressGauge = new RadialGauge({
+            renderTo: 'pressGauge', width: 200, height: 200, units: "hPa",
+            minValue: 900, maxValue: 1100,
+            majorTicks: ["900","925","950","975","1000","1025","1050","1075","1100"],
+            minorTicks: 5, strokeTicks: true,
+            colorPlate: "#222", colorMajorTicks: "#f5f5f5", colorMinorTicks: "#ddd",
+            colorNumbers: "#ccc", colorNeedle: "rgba(200,200,200,1)", colorNeedleEnd: "rgba(255,255,255,.9)",
+            valueBox: false,
+            highlights: [
+                { from: 900, to: 980, color: "rgba(200,50,50,.5)" },
+                { from: 980, to: 1020, color: "rgba(0,200,0,.25)" },
+                { from: 1020, to: 1100, color: "rgba(200,200,0,.25)" }
+            ]
+        }).draw();
 
         // --- 4. LISTEN FOR DATA ---
         console.log("Listening for Firebase data...");
@@ -137,7 +153,18 @@
             // 1. Update Text Values
             document.getElementById('tempVal').innerText = data.Temperature + " °C";
             document.getElementById('humVal').innerText = data.Humidity + " %";
-            document.getElementById('pressVal').innerText = data.Pressure;
+
+            // Pressure: Firebase stores pressure in Pascals (Pa). Convert to hPa for display/gauge.
+            if (data.Pressure !== undefined && data.Pressure !== null) {
+                let pressurePa = Number(data.Pressure);
+                // Convert Pa to hPa (1 hPa = 100 Pa). User indicated value is 991 Pa, so we divide by 100.
+                let pressureHpa = pressurePa / 100.0;
+                document.getElementById('pressVal').innerText = pressureHpa.toFixed(1) + " hPa";
+                pressGauge.value = pressureHpa;
+            } else {
+                document.getElementById('pressVal').innerText = "-- hPa";
+            }
+
             document.getElementById('altVal').innerText = data.Altitude + " m";
             
             // Check if Motion data exists (Pitch/Roll)
@@ -163,7 +190,7 @@
             let lng = parseFloat(data.Location.Lng);
 
             // Only update map if GPS has a fix (not 0.0)
-            if (lat !== 0 && lng !== 0) {
+            if (lat !== 0 && lng !== 0 && !isNaN(lat) && !isNaN(lng)) {
                 let newPos = [lat, lng];
                 marker.setLatLng(newPos);
                 map.setView(newPos, 18); // Zoom level 18 (Street level)
