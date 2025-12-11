@@ -49,8 +49,7 @@
             <h3>PRESSURE</h3>
             <!-- Canvas for the pressure gauge -->
             <canvas id="pressGauge"></canvas>
-            <div id="pressVal" class="big-text" style="font-size: 30px; margin-top: 10px;">-- hPa</div>
-            <p>hPa (hectopascals)</p>
+            <div id="pressVal" class="big-text" style="font-size: 30px; margin-top: 10px;">-- Pa</div>
         </div>
 
         <div class="card map-container">
@@ -125,7 +124,7 @@
 
         // Pressure Gauge (complete implementation)
         var pressGauge = new RadialGauge({
-            renderTo: 'pressGauge', width: 200, height: 200, units: "hPa",
+            renderTo: 'pressGauge', width: 200, height: 200, units: "Pa",
             minValue: 900, maxValue: 1100,
             majorTicks: ["900","925","950","975","1000","1025","1050","1075","1100"],
             minorTicks: 5, strokeTicks: true,
@@ -154,15 +153,13 @@
             document.getElementById('tempVal').innerText = data.Temperature + " °C";
             document.getElementById('humVal').innerText = data.Humidity + " %";
 
-            // Pressure: Firebase stores pressure in Pascals (Pa). Convert to hPa for display/gauge.
+            // Pressure: Firebase stores pressure in Pascals (Pa). Display in Pa.
             if (data.Pressure !== undefined && data.Pressure !== null) {
                 let pressurePa = Number(data.Pressure);
-                // Convert Pa to hPa (1 hPa = 100 Pa). User indicated value is 991 Pa, so we divide by 100.
-                let pressureHpa = pressurePa / 100.0;
-                document.getElementById('pressVal').innerText = pressureHpa.toFixed(1) + " hPa";
-                pressGauge.value = pressureHpa;
+                document.getElementById('pressVal').innerText = pressurePa.toFixed(1) + " Pa";
+                pressGauge.value = pressurePa;
             } else {
-                document.getElementById('pressVal').innerText = "-- hPa";
+                document.getElementById('pressVal').innerText = "-- Pa";
             }
 
             document.getElementById('altVal').innerText = data.Altitude + " m";
