@@ -7,7 +7,8 @@
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
     <script src="https://cdn.rawgit.com/Mikhus/canvas-gauges/gh-pages/download/2.1.7/all/gauge.min.js"></script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
     <style>
         body { 
             background-color: #1a1a1a; 
@@ -31,7 +32,7 @@
         h1 { 
             color: #00ffcc; 
             margin: 0; 
-            font-size: 32px; 
+            font-size: 36px; 
             letter-spacing: 4px; 
             text-shadow: 0 0 10px rgba(0, 255, 204, 0.3);
             text-align: center;
@@ -39,7 +40,7 @@
         /* --- DASHBOARD GRID --- */
         .dashboard { 
             display: grid; 
-            grid-template-columns: repeat(3, 1fr); 
+            grid-template-columns: repeat(4, 1fr); 
             gap: 25px; 
         }
         
@@ -57,10 +58,10 @@
         .card h3 { 
             color: #00ffcc; 
             margin: 0 0 20px 0; 
-            font-size: 18px; 
+            font-size: 24px; 
             text-transform: uppercase; 
             letter-spacing: 2px;
-            border-bottom: 1px solid #333;
+            border-bottom: 1px solid #00ffcc;
             padding-bottom: 10px;
             font-weight: bold;
         }
@@ -71,6 +72,22 @@
         .map-container { grid-column: span 2; padding: 0; overflow: hidden; border: 2px solid #00ffcc; display: flex; flex-direction: column; } 
         #map { height: 400px; width: 100%; flex-grow: 1; }
         .map-container h3 { margin: 0; padding: 15px; background: #2d2d2d; border-bottom: 2px solid #00ffcc; }
+
+        /* 3D Container */
+        .three-container { 
+            grid-column: span 2; 
+            height: 455px; /* Matches map height */
+            padding: 0; 
+            border: 2px solid #00ffcc; 
+            border-radius: 12px; 
+            overflow: hidden; 
+            background-color: #2d2d2d; /* Seamless background */
+            position: relative;
+            display: flex;
+            flex-direction: column; 
+        }
+        .three-container h3 { margin: 0; padding: 15px; background: #2d2d2d; border-bottom: 2px solid #00ffcc; flex-shrink: 0; }
+        #3d-view { width: 100%; flex-grow: 1; display: block; position: relative; min-height: 0; }
 
         /* Status Blinker */
         .live-indicator { margin-bottom: 2.3px; height: 13px; width: 13px; background-color: red; border-radius: 50%; display: inline-block; margin-right: 2px; }
@@ -85,11 +102,12 @@
             border: 1px solid rgba(11, 102, 87, 0.12);
             padding: 6px 12px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 20px;
             margin-top: 8px;
             margin-bottom: 25px;
             opacity: 0.95;
             transition: box-shadow 150ms ease, transform 150ms ease;
+            font-weight: bold;
         }
         .last-update.small { font-size: 12px; padding: 4px 8px; }
         .last-update.fresh { box-shadow: 0 4px 12px rgba(0,255,204,0.08); transform: translateY(-1px); }
@@ -140,10 +158,13 @@
             <div id="map"></div>
         </div>
 
-        <div class="card">
-            <h3>TILT</h3>
-            <p>Pitch: <span id="pitchVal">0</span>°</p>
-            <p>Roll: <span id="rollVal">0</span>°</p>
+        <div class="card three-container">
+            <h3>3D ORIENTATION</h3>
+            <div class="overlay-text">
+                Pitch: <span id="pitchVal">0</span>°<br>
+                Roll: <span id="rollVal">0</span>°
+            </div>
+            <div id="3d-view"></div>
         </div>
     </div>
 
@@ -176,7 +197,7 @@
         // --- 3. SETUP GAUGES ---
         // Temperature Gauge
         var tempGauge = new RadialGauge({
-            renderTo: 'tempGauge', width: 200, height: 200, units: "°C",
+            renderTo: 'tempGauge', width: 300, height: 300, units: "°C",
             minValue: 0, maxValue: 50,
             majorTicks: ["0","10","20","30","40","50"],
             minorTicks: 2, strokeTicks: true,
@@ -188,7 +209,7 @@
 
         // Humidity Gauge
         var humGauge = new RadialGauge({
-            renderTo: 'humGauge', width: 200, height: 200, units: "%",
+            renderTo: 'humGauge', width: 300, height: 300, units: "%",
             minValue: 0, maxValue: 100,
             colorPlate: "#222", colorNumbers: "#ccc",
             highlights: [ { from: 0, to: 100, color: "rgba(0, 200, 255, .3)" } ]
@@ -203,7 +224,7 @@
 
         // Pressure Gauge (complete implementation)
         var pressGauge = new RadialGauge({
-            renderTo: 'pressGauge', width: 200, height: 200, units: "Pa",
+            renderTo: 'pressGauge', width: 300, height: 300, units: "Pa",
             minValue: 900, maxValue: 1100,
             majorTicks: ["900","925","950","975","1000","1025","1050","1075","1100"],
             minorTicks: 5, strokeTicks: true,
@@ -211,13 +232,88 @@
             colorNumbers: "#ccc", colorNeedle: "rgba(200,200,200,1)", colorNeedleEnd: "rgba(255,255,255,.9)",
             valueBox: false,
             highlights: [
-                { from: 900, to: 980, color: "rgba(200,50,50,.5)" },
+                { from: 900, to: 980, color: "rgba(200,200,0,.25)" },
                 { from: 980, to: 1020, color: "rgba(0,200,0,.25)" },
-                { from: 1020, to: 1100, color: "rgba(200,200,0,.25)" }
+                { from: 1020, to: 1100, color: "rgba(200,50,50,.5)" }
             ]
         }).draw();
 
-        // --- 4. LISTEN FOR DATA ---
+        // --- 4. 3D VISUALIZATION Setup---
+        let scene, camera, renderer, canSat;
+        let container;
+
+        function init3DView() {
+            container = document.getElementById('3d-view');
+            if (!container) return;
+            
+            while (container.firstChild) container.removeChild(container.firstChild);
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x2d2d2d);
+            
+            const width = container.clientWidth || 500;
+            const height = container.clientHeight || 300;
+            
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(0, 1, 7); 
+            camera.lookAt(0, 0, 0);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            container.appendChild(renderer.domElement);
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.2);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+            dirLight.position.set(5, 10, 7);
+            scene.add(dirLight);
+            
+            createCanSatModel();
+            
+            const axesHelper = new THREE.AxesHelper(3);
+            scene.add(axesHelper);
+            
+            animate();
+            
+            const resizeObserver = new ResizeObserver(() => {
+                const w = container.clientWidth;
+                const h = container.clientHeight;
+                if (w > 0 && h > 0) {
+                    renderer.setSize(w, h);
+                    camera.aspect = w / h;
+                    camera.updateProjectionMatrix();
+                }
+            });
+            resizeObserver.observe(container);
+        }
+
+        function createCanSatModel() {
+            const geometry = new THREE.CylinderGeometry(1.4, 1.4, 3.5, 32);
+            const material = new THREE.MeshPhongMaterial({ color: 0xff0000, shininess: 100 });
+            canSat = new THREE.Mesh(geometry, material);
+            
+            const stripe = new THREE.Mesh(
+                new THREE.CylinderGeometry(1.45, 1.45, 0.5, 32), 
+                new THREE.MeshBasicMaterial({ color: 0xffffff })
+            );
+            canSat.add(stripe);
+            scene.add(canSat);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', init3DView);
+        } else {
+            setTimeout(init3DView, 100);
+        }
+
+        // --- 5. LISTEN FOR DATA ---
         console.log("Listening for Firebase data...");
         
         // Listen to the 'Live' node for real-time updates
@@ -255,9 +351,7 @@
             
             // Check if Motion data exists (Pitch/Roll)
             if(data.Motion) {
-                // Calculate Pitch/Roll here if your Python script sends Raw X/Y/Z
-                // Or display directly if Python sends degrees.
-                // Assuming Python sends Raw:
+                // Calculate Pitch/Roll here from accelerometer data:
                 let acX = data.Motion.X; let acY = data.Motion.Y; let acZ = data.Motion.Z;
                 let pitch = Math.atan2(-acX, Math.sqrt(acY*acY + acZ*acZ)) * 57.29;
                 let roll = Math.atan2(acY, acZ) * 57.29;
